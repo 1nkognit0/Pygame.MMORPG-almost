@@ -69,7 +69,10 @@ sprites = {
          },
     'items':
         {
-            'iron_sword': pygame.transform.scale(load_image('money.png', color_key=-1), (60, 60))
+            'iron_sword': pygame.transform.scale(load_image('items/iron_sword.png', color_key=-1), (60, 60)),
+            'empty_helmet': pygame.transform.scale(load_image('items/empty_helmet.png', color_key=-1), (60, 60)),
+            'empty_armor': pygame.transform.scale(load_image('items/empty_armor.png', color_key=-1), (60, 60)),
+            'empty_boots': pygame.transform.scale(load_image('items/empty_boots.png', color_key=-1), (60, 60)),
         }
 }
 
