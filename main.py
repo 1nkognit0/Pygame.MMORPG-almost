@@ -1,19 +1,10 @@
 import sys
 import csv
 from random import choice, randint
-import pygame
 import os
 from math import hypot
-
-
-pygame.init()
-
-WIDTH = 1000
-HEIGHT = 800
-SIZE = (WIDTH, HEIGHT)
-screen = pygame.display.set_mode(SIZE)
-FPS = 120
-clock = pygame.time.Clock()
+from images import sprites, load_image
+from settings import *
 
 
 def terminate():
@@ -38,22 +29,6 @@ def load_map(filename):
     max_width = max(map(len, level_map)) - 1
 
     return list(map(lambda x: x.strip().ljust(max_width, '.'), level_map))
-
-
-def load_image(name, color_key=None):
-    fullname = os.path.join('data', name)
-    if not os.path.isfile(fullname):  # если файл не существует, то выходим
-        print(f"Файл с изображением '{fullname}' не найден")
-        sys.exit()
-    image = pygame.image.load(fullname)
-    if color_key is None:
-        image = image.convert_alpha()
-    else:
-        image = image.convert()
-        if color_key == -1:
-            color_key = image.get_at((0, 0))
-        image.set_colorkey(color_key)
-    return image
 
 
 def start_screen():
@@ -114,7 +89,7 @@ def start_screen():
                                 columns = ['lvl_game', 'lvl_hero', 'exp_hero']
                                 writer = csv.DictWriter(f, fieldnames=columns)
                                 writer.writeheader()
-
+                                count_level_game = 0
                                 info = {"lvl_game": 0, "lvl_hero": 1, 'exp_hero': 0}
                                 writer.writerow(info)
                             info = generate_map(load_map(get_map_name()))
@@ -271,37 +246,15 @@ class Tile(pygame.sprite.Sprite):
 
 
 class Hero(pygame.sprite.Sprite):
-    left_go = [pygame.transform.scale(load_image(f'hero_left\hero_go_{i}.png', color_key=-1),
-               (32, 50)) for i in range(1, 7)]
-    left_attack = [pygame.transform.scale(load_image(f'hero_left\hero_attack_{i}.png', color_key=-1),
-                   (32, 50)) for i in range(1, 4)]
-    left_attack[1] = pygame.transform.scale(load_image(f'hero_left\hero_attack_{1}.png', color_key=-1), (32, 50))
-    left_attack[2] = pygame.transform.scale(load_image(f'hero_left\hero_attack_{2}.png', color_key=-1), (45, 52))
-    left_stand = [pygame.transform.scale(load_image(f'hero_left\hero_stand_{i}.png', color_key=-1),
-                  (32, 50)) for i in range(1, 7)]
-    left_death = [pygame.transform.scale(load_image(f'hero_left\hero_dead_left_{i}.png', color_key=-1),
-                                         (32, 50)) for i in range(1, 4)]
-
-    right_go = [pygame.transform.scale(load_image(f'hero_right\hero_go_{i}.png', color_key=-1),
-                (32, 50)) for i in range(1, 7)]
-    right_attack = [pygame.transform.scale(load_image(f'hero_right\hero_attack_{i}.png', color_key=-1),
-                    (32, 50)) for i in range(1, 4)]
-    right_attack[1] = pygame.transform.scale(load_image(f'hero_right\hero_attack_{1}.png', color_key=-1), (32, 50))
-    right_attack[2] = pygame.transform.scale(load_image(f'hero_right\hero_attack_{2}.png', color_key=-1), (45, 52))
-    right_stand = [pygame.transform.scale(load_image(f'hero_right\hero_stand_{i}.png', color_key=-1),
-                   (32, 50)) for i in range(1, 7)]
-    right_death = [pygame.transform.scale(load_image(f'hero_right\hero_dead_{i}.png', color_key=-1),
-                                          (32, 50)) for i in range(1, 4)]
-
-    all_level = {1: [0, 3, 1],
+    all_level = {1: [0, 30, 1],
                  2: [10, 4, 1],
-                 3: [50, 5, 1],
-                 4: [100, 5, 2],
-                 5: [200, 6, 2]}
+                 3: [30, 5, 2],
+                 4: [50, 6, 2],
+                 5: [100, 7, 3]}
 
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
-        self.image = Hero.left_stand[0]
+        self.image = sprites['hero']['right_stand'][0]
         self.rect = self.image.get_rect().move(tile_width * pos_x + 10, tile_height * pos_y + 10)
 
         self.left = True
@@ -309,6 +262,8 @@ class Hero(pygame.sprite.Sprite):
         self.f = True
         self.shield = False
         self.death = False
+        self.change_x = 0
+        self.change_y = 0
 
         self.level = 1
         self.hp = self.all_level[self.level][1]
@@ -316,6 +271,7 @@ class Hero(pygame.sprite.Sprite):
         self.speed = 2
         self.attack_radius = 0
         self.exp = 0
+        self.money = 0
         self.damage = self.all_level[self.level][2]
 
         self.frames = 0
@@ -324,9 +280,9 @@ class Hero(pygame.sprite.Sprite):
         self.frames_death = 0
 
     def update(self):
-        change_x = change_y = 0
+        self.change_x = self.change_y = 0
         # задается изменение картинки через каждые FPS // len(Hero.left_go) фреймов
-        pic_ind = self.frames // (FPS // len(Hero.left_go))
+        pic_ind = self.frames // (FPS // len(sprites['hero']['left_go']))
         self.frames = (self.frames + 1) % FPS  # получаем числа из [0, FPS)
 
         if pygame.key.get_pressed()[pygame.K_SPACE]:
@@ -334,9 +290,10 @@ class Hero(pygame.sprite.Sprite):
 
         if self.death:
             if self.frames_death < FPS:
-                pic_ind = self.frames_death // (FPS // len(Hero.left_death))
+                pic_ind = self.frames_death // (FPS // len(sprites['hero']['left_death']))
                 self.frames_death += 1
-                self.image = Hero.left_death[pic_ind] if self.left else Hero.right_death[pic_ind]
+                self.image = sprites['hero']['left_death'][pic_ind] if self.left else sprites['hero']['left_death'][
+                    pic_ind]
             else:
                 self.frames_death += 1
                 if self.frames_death == FPS * 2:
@@ -344,51 +301,69 @@ class Hero(pygame.sprite.Sprite):
                     dead_screen()
 
         elif self.attack:
-            pic_ind = self.frames_attack // ((FPS // 2) // len(Hero.left_attack))
+            pic_ind = self.frames_attack // ((FPS // 2) // len(sprites['hero']['left_attack']))
             if (not self.attack_radius) and self.f:
                 self.attack_radius = AttackRadius(self.left)
                 self.f = False
 
             self.frames_attack = (self.frames_attack + 1) % (FPS // 2)
-            self.image = Hero.left_attack[pic_ind] if self.left else Hero.right_attack[pic_ind]
+            self.image = sprites['hero']['left_attack'][pic_ind] if self.left else sprites['hero']['right_attack'][
+                pic_ind]
+            if self.frames_attack == (FPS // 4):
+                if self.attack_radius:
+                    self.attack_radius.kill()
             if self.frames_attack == (FPS // 2) - 1:
                 self.attack = False
                 self.f = True
                 self.frames_attack = 0
-                if self.attack_radius:
-                    self.attack_radius.kill()
                 self.attack_radius = 0
 
         else:
             if pygame.key.get_pressed()[pygame.K_LEFT] or pygame.key.get_pressed()[pygame.K_a]:
-                self.image = Hero.left_go[pic_ind]
+                self.image = sprites['hero']['left_go'][pic_ind]
                 self.left = True
-                change_x = -self.speed
+                self.change_x = -self.speed
             if pygame.key.get_pressed()[pygame.K_RIGHT] or pygame.key.get_pressed()[pygame.K_d]:
-                self.image = Hero.right_go[pic_ind]
+                self.image = sprites['hero']['right_go'][pic_ind]
                 self.left = False
-                change_x = self.speed
+                self.change_x = self.speed
             if pygame.key.get_pressed()[pygame.K_UP] or pygame.key.get_pressed()[pygame.K_w]:
-                self.image = Hero.left_go[pic_ind] if self.left else Hero.right_go[pic_ind]
-                change_y = -self.speed
+                self.image = sprites['hero']['left_go'][pic_ind] if self.left else sprites['hero']['right_go'][pic_ind]
+                self.change_y = -self.speed
             if pygame.key.get_pressed()[pygame.K_DOWN] or pygame.key.get_pressed()[pygame.K_s]:
-                self.image = Hero.left_go[pic_ind] if self.left else Hero.right_go[pic_ind]
-                change_y = self.speed
+                self.image = sprites['hero']['left_go'][pic_ind] if self.left else sprites['hero']['right_go'][pic_ind]
+                self.change_y = self.speed
             if not (pygame.key.get_pressed()[pygame.K_DOWN] or pygame.key.get_pressed()[pygame.K_s]) and \
                     not (pygame.key.get_pressed()[pygame.K_UP] or pygame.key.get_pressed()[pygame.K_w]) and \
                     not (pygame.key.get_pressed()[pygame.K_RIGHT] or pygame.key.get_pressed()[pygame.K_d]) and \
                     not (pygame.key.get_pressed()[pygame.K_LEFT] or pygame.key.get_pressed()[pygame.K_a]):
-                self.image = Hero.left_stand[pic_ind] if self.left else Hero.right_stand[pic_ind]
-            self.rect.x += change_x
-            self.rect.y += change_y
-            if pygame.sprite.spritecollideany(self, boxes_group):
-                self.rect.x -= change_x
-                self.rect.y -= change_y
+                self.image = sprites['hero']['left_stand'][pic_ind] if self.left else sprites['hero']['right_stand'][
+                    pic_ind]
+            self.rect.x += self.change_x
+            self.collide_block('x')
+            self.rect.y += self.change_y
+            self.collide_block('y')
             if pygame.sprite.spritecollideany(self, portal_group):
                 win_screen()
 
         if self.shield:
             self.presence_shield()
+
+    def collide_block(self, direction):
+        if direction == 'x':
+            collision = pygame.sprite.spritecollide(self, boxes_group, False)
+            if collision:
+                if self.change_x > 0:
+                    self.rect.x = collision[0].rect.left - self.rect.width
+                if self.change_x < 0:
+                    self.rect.x = collision[0].rect.right
+        elif direction == 'y':
+            collision = pygame.sprite.spritecollide(self, boxes_group, False)
+            if collision:
+                if self.change_y > 0:
+                    self.rect.y = collision[0].rect.top - self.rect.height
+                if self.change_y < 0:
+                    self.rect.y = collision[0].rect.bottom
 
     def presence_shield(self):
         # щит, спасающий игрока от постоянного получения урона
@@ -405,12 +380,17 @@ class Hero(pygame.sprite.Sprite):
 
     def level_up(self):
         # увеличение уровня игрока
-        if self.exp >= Hero.all_level[self.level + 1][0] and self.level < 6:
+        if self.level == 5:
+            return
+        if self.exp >= Hero.all_level[self.level + 1][0]:
+            if self.exp == Hero.all_level[self.level + 1][0]:
+                self.exp = 0
+            else:
+                self.exp -= Hero.all_level[self.level + 1][0]
             self.level += 1
             self.max_hp = Hero.all_level[self.level][1]
             self.hp = self.max_hp
             self.damage = Hero.all_level[self.level][2]
-            self.exp = 0
 
     def indicators(self):
         # отрисовка текущего количества хп, появляется только если очки здоровья не фулл
@@ -436,30 +416,13 @@ class Hero(pygame.sprite.Sprite):
 
 
 class Enemy(pygame.sprite.Sprite):
-    left_go = [pygame.transform.scale(load_image(f'slime_left\slime_go_{i}.png', color_key=-1),
-                                      (38, 56)) for i in range(1, 13)]
-    left_stand = [pygame.transform.scale(load_image(f'slime_left\slime_stand_{i}.png', color_key=-1),
-                                         (38, 56)) for i in range(1, 5)]
-    left_stand[2] = pygame.transform.scale(load_image(f'slime_left\slime_stand_{3}.png', color_key=-1), (40, 70))
-    left_stand[3] = pygame.transform.scale(load_image(f'slime_left\slime_stand_{4}.png', color_key=-1), (40, 75))
-    left_death = [pygame.transform.scale(load_image(f'slime_left\slime_dead_{i}.png', color_key=-1),
-                                         (38, 56)) for i in range(1, 6)]
-
-    right_go = [pygame.transform.scale(load_image(f'slime_right\slime_go_{i}.png', color_key=-1),
-                                       (38, 56)) for i in range(1, 13)]
-    right_stand = [pygame.transform.scale(load_image(f'slime_right\slime_stand_{i}.png', color_key=-1),
-                                          (38, 56)) for i in range(1, 5)]
-    right_stand[2] = pygame.transform.scale(load_image(f'slime_right\slime_stand_{3}.png', color_key=-1), (40, 70))
-    right_stand[3] = pygame.transform.scale(load_image(f'slime_right\slime_stand_{4}.png', color_key=-1), (40, 75))
-    right_death = [pygame.transform.scale(load_image(f'slime_right\slime_dead_{i}.png', color_key=-1),
-                                          (38, 56)) for i in range(1, 6)]
-
-    def __init__(self, pos_x, pos_y):
+    def __init__(self, pos_x, pos_y, name):
         super().__init__(enemies_group, all_sprites)
         self.route = choice(['right', 'left', 'up', 'down'])
         self.len_way = randint(100, 300)
 
-        self.image = Enemy.left_stand[0]
+        self.name = name
+        self.image = sprites[name]['left_stand'][0]
         self.rect = self.image.get_rect().move(tile_width * pos_x + 10, tile_height * pos_y + 10)
 
         self.stand = False
@@ -469,9 +432,13 @@ class Enemy(pygame.sprite.Sprite):
             self.left = True
         self.death = False
         self.reclining = False
+        self.x_change = 0
+        self.y_change = 0
 
-        self.hp = 5
-        self.damage = 1
+        self.hp = 0
+        self.damage = 0
+        self.exp_give = 0
+        self.money_give = 0
         self.max_hp = self.hp
         self.passed_now = 0
         self.speed = 1
@@ -483,62 +450,62 @@ class Enemy(pygame.sprite.Sprite):
         self.frames_reclining = 0
 
     def update(self):
-        x_change = y_change = 0
-        pic_ind = self.frames // (FPS // len(Enemy.left_go))
+        self.x_change = self.y_change = 0
+        pic_ind = self.frames // (FPS // len(sprites[self.name]['left_go']))
         self.frames = (self.frames + 1) % FPS
 
         distance = hypot(abs(player.rect.x - self.rect.x), abs(player.rect.y - self.rect.y))
 
         if self.death:
-            pic_ind = self.frames_death // ((FPS // 3) // len(Enemy.left_death))
+            pic_ind = self.frames_death // ((FPS // 3) // len(sprites[self.name]['left_death']))
             self.frames_death += 1
-            self.image = Enemy.left_death[pic_ind] if self.left else Enemy.right_death[pic_ind]
+            self.image = sprites[self.name]['left_death'][pic_ind] if self.left else sprites[self.name]['left_death'][
+                pic_ind]
             if self.frames_death == (FPS // 3) - 1:
-                player.exp += 5
+                player.exp += self.exp_give
+                player.money += self.money_give
                 player.level_up()
                 self.kill()
 
         elif self.reclining:
-            self.frames_reclining += 1
-            self.rect.x -= 3 if player.left else -3
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= 3 if player.left else -3
-                self.reclining = False
             if self.frames_reclining == 20:
                 self.reclining = False
                 self.frames_reclining = 0
+            else:
+                self.frames_reclining += 1
+                self.x_change -= 3 if player.left else -3
+                self.rect.x += self.x_change
+                self.collide_block('x', '')
 
         elif distance < 200:
             if player.rect.x > self.rect.x:
-                x_change += self.speed
+                self.x_change += self.speed
                 self.left = False
-                self.image = Enemy.right_go[pic_ind]
+                self.image = sprites[self.name]['right_go'][pic_ind]
             if player.rect.x < self.rect.x:
-                x_change -= self.speed
+                self.x_change -= self.speed
                 self.left = True
-                self.image = Enemy.left_go[pic_ind]
+                self.image = sprites[self.name]['left_go'][pic_ind]
             if player.rect.y > self.rect.y:
-                y_change += self.speed
-                self.image = Enemy.left_go[pic_ind] if self.left else Enemy.right_go[pic_ind]
+                self.y_change += self.speed
+                self.image = sprites[self.name]['left_go'][pic_ind] if self.left else sprites[self.name]['right_go'][
+                    pic_ind]
             if player.rect.y < self.rect.y:
-                y_change -= self.speed
-                self.image = Enemy.left_go[pic_ind] if self.left else Enemy.right_go[pic_ind]
-            self.rect.x += x_change
-            self.rect.y += y_change
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
+                self.y_change -= self.speed
+                self.image = sprites[self.name]['left_go'][pic_ind] if self.left else sprites[self.name]['right_go'][
+                    pic_ind]
+            self.rect.x += self.x_change
+            self.collide_block('x', '')
+            self.rect.y += self.y_change
+            self.collide_block('y', '')
             if pygame.sprite.spritecollideany(self, attack_group):
-                if player.attack_radius:
-                    player.attack_radius.kill()
                 self.reclining = True
                 self.hp -= player.damage
-                player.attack_radius = 0
                 if self.hp <= 0:
                     self.death = True
             if pygame.sprite.spritecollideany(self, player_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
+                self.rect.x -= self.x_change
+                self.rect.y -= self.y_change
                 if player.presence_shield():
                     player.hp -= self.damage
                     if player.hp <= 0:
@@ -546,29 +513,27 @@ class Enemy(pygame.sprite.Sprite):
 
         else:
             if self.route == 'left' and not self.stand:
-                x_change -= self.speed
-                self.image = Enemy.left_go[pic_ind]
+                self.x_change -= self.speed
+                self.image = sprites[self.name]['left_go'][pic_ind]
                 self.passed_now += self.speed
             elif self.route == 'up' and not self.stand:
-                y_change -= self.speed
-                self.image = Enemy.left_go[pic_ind] if self.left else Enemy.right_go[pic_ind]
+                self.y_change -= self.speed
+                self.image = sprites[self.name]['left_go'][pic_ind] if self.left else sprites[self.name]['right_go'][
+                    pic_ind]
                 self.passed_now += self.speed
             elif self.route == 'right' and not self.stand:
-                x_change += self.speed
-                self.image = Enemy.right_go[pic_ind]
+                self.x_change += self.speed
+                self.image = sprites[self.name]['right_go'][pic_ind]
                 self.passed_now += self.speed
             elif self.route == 'down' and not self.stand:
-                y_change += self.speed
-                self.image = Enemy.left_go[pic_ind] if self.left else Enemy.right_go[pic_ind]
+                self.y_change += self.speed
+                self.image = sprites[self.name]['left_go'][pic_ind] if self.left else sprites[self.name]['right_go'][
+                    pic_ind]
                 self.passed_now += self.speed
-            self.rect.x += x_change
-            self.rect.y += y_change
-
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
-                self.route = choice(['right', 'left', 'up', 'down'])
-                self.len_way = randint(200, 400)
+            self.rect.x += self.x_change
+            self.collide_block('x', '+')
+            self.rect.y += self.y_change
+            self.collide_block('y', '+')
 
             if self.passed_now >= self.len_way:
                 self.passed_now = 0
@@ -581,14 +546,39 @@ class Enemy(pygame.sprite.Sprite):
                 self.stand = True
 
             if self.stand:
-                pic_ind = self.frames_stand // ((FPS - 40) // len(Enemy.left_stand))
+                pic_ind = self.frames_stand // ((FPS - 40) // len(sprites[self.name]['left_stand']))
                 self.cycle_stand += 1
                 self.frames_stand = (self.frames_stand + 1) % (FPS - 40)
-                self.image = Enemy.left_stand[pic_ind] if self.left else Enemy.right_stand[pic_ind]
+                self.image = sprites[self.name]['left_stand'][pic_ind] if self.left else \
+                    sprites[self.name]['right_stand'][pic_ind]
                 if self.cycle_stand >= 360:
                     self.stand = False
                     self.cycle_stand = 0
                     self.frames_stand = 0
+
+    def collide_block(self, direction, purpose):
+        if direction == 'x':
+            collision = pygame.sprite.spritecollide(self, boxes_group, False)\
+                        + pygame.sprite.spritecollide(self, border_group, False)
+            if collision:
+                if self.x_change > 0:
+                    self.rect.x = collision[0].rect.left - self.rect.width
+                if self.x_change < 0:
+                    self.rect.x = collision[0].rect.right
+                if purpose:
+                    self.route = choice(['right', 'left', 'up', 'down'])
+                    self.len_way = randint(200, 400)
+        elif direction == 'y':
+            collision = pygame.sprite.spritecollide(self, boxes_group, False)\
+                        + pygame.sprite.spritecollide(self, border_group, False)
+            if collision:
+                if self.y_change > 0:
+                    self.rect.y = collision[0].rect.top - self.rect.height
+                if self.y_change < 0:
+                    self.rect.y = collision[0].rect.bottom
+                if purpose:
+                    self.route = choice(['right', 'left', 'up', 'down'])
+                    self.len_way = randint(200, 400)
 
     def hp_strip(self):
         if self.max_hp != self.hp:
@@ -597,162 +587,26 @@ class Enemy(pygame.sprite.Sprite):
             pygame.draw.rect(screen, (pygame.Color('green')), (self.rect.x - 5, self.rect.y - 5, weight_green_strip, 5))
 
 
-class Bear(pygame.sprite.Sprite):
-    left_go = [pygame.transform.scale(load_image(f'bear_right/bear_go_{i}.png', color_key=-1),
-                                      (60, 65)) for i in range(1, 5)]
-    left_stand = [pygame.transform.scale(load_image(f'bear_right/bear_{i}.png', color_key=-1),
-                                         (60, 65)) for i in range(1, 5)]
-    left_death = [pygame.transform.scale(load_image(f'bear_right/bear_death_{i}.png', color_key=-1),
-                                         (60, 56)) for i in range(1, 4)]
-
-    right_go = [pygame.transform.scale(load_image(f'bear_left/bear_go_{i}.png', color_key=-1),
-                                       (60, 65)) for i in range(1, 5)]
-    right_stand = [pygame.transform.scale(load_image(f'bear_left/bear_{i}.png', color_key=-1),
-                                          (60, 65)) for i in range(1, 5)]
-    right_death = [pygame.transform.scale(load_image(f'bear_left/bear_death_{i}.png', color_key=-1),
-                                          (60, 56)) for i in range(1, 4)]
-
-    def __init__(self, pos_x, pos_y):
-        super().__init__(enemies_group, all_sprites)
-        self.route = choice(['right', 'left', 'up', 'down'])
-        self.len_way = randint(100, 300)
-
-        self.image = Enemy.left_stand[0]
-        self.rect = self.image.get_rect().move(tile_width * pos_x + 10, tile_height * pos_y + 10)
-
-        self.stand = False
-        if self.route == 'right':
-            self.left = False
-        else:
-            self.left = True
-        self.death = False
-        self.reclining = False
-
+class Bear(Enemy, pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y, name):
+        Enemy.__init__(self, pos_x, pos_y, name)
+        pygame.sprite.Sprite.__init__(self, enemies_group, all_sprites)
         self.hp = 15
         self.damage = 1.5
         self.max_hp = self.hp
-        self.passed_now = 0
-        self.speed = 1
-        self.cycle_stand = 0
+        self.exp_give = 10
+        self.money_give = randint(4, 7)
 
-        self.frames = 0
-        self.frames_stand = 0
-        self.frames_death = 0
-        self.frames_reclining = 0
 
-    def update(self):
-        x_change = y_change = 0
-        pic_ind = self.frames // (FPS // len(Bear.left_go))
-        self.frames = (self.frames + 1) % FPS
-
-        distance = hypot(abs(player.rect.x - self.rect.x), abs(player.rect.y - self.rect.y))
-
-        if self.death:
-            pic_ind = self.frames_death // ((FPS // 2) // len(Bear.left_death))
-            self.frames_death += 1
-            self.image = Bear.left_death[pic_ind] if self.left else Bear.right_death[pic_ind]
-            if self.frames_death == (FPS // 2) - 1:
-                player.exp += 15
-                player.level_up()
-                self.kill()
-
-        elif self.reclining:
-            self.frames_reclining += 1
-            self.rect.x -= 3 if player.left else -3
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= 3 if player.left else -3
-                self.reclining = False
-            if self.frames_reclining == 20:
-                self.reclining = False
-                self.frames_reclining = 0
-
-        elif distance < 250:
-            if player.rect.x > self.rect.x:
-                x_change += self.speed
-                self.left = False
-                self.image = Bear.right_go[pic_ind]
-            if player.rect.x < self.rect.x:
-                x_change -= self.speed
-                self.left = True
-                self.image = Bear.left_go[pic_ind]
-            if player.rect.y > self.rect.y:
-                y_change += self.speed
-                self.image = Bear.left_go[pic_ind] if self.left else Bear.right_go[pic_ind]
-            if player.rect.y < self.rect.y:
-                y_change -= self.speed
-                self.image = Bear.left_go[pic_ind] if self.left else Bear.right_go[pic_ind]
-            self.rect.x += x_change
-            self.rect.y += y_change
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
-            if pygame.sprite.spritecollideany(self, attack_group):
-                if player.attack_radius:
-                    player.attack_radius.kill()
-                self.reclining = True
-                self.hp -= player.damage
-                player.attack_radius = 0
-                if self.hp <= 0:
-                    self.death = True
-            if pygame.sprite.spritecollideany(self, player_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
-                if player.presence_shield():
-                    player.hp -= self.damage
-                    if player.hp <= 0:
-                        player.death = True
-
-        else:
-            if self.route == 'left' and not self.stand:
-                x_change -= self.speed
-                self.image = Bear.left_go[pic_ind]
-                self.passed_now += self.speed
-            elif self.route == 'up' and not self.stand:
-                y_change -= self.speed
-                self.image = Bear.left_go[pic_ind] if self.left else Bear.right_go[pic_ind]
-                self.passed_now += self.speed
-            elif self.route == 'right' and not self.stand:
-                x_change += self.speed
-                self.image = Bear.right_go[pic_ind]
-                self.passed_now += self.speed
-            elif self.route == 'down' and not self.stand:
-                y_change += self.speed
-                self.image = Bear.left_go[pic_ind] if self.left else Bear.right_go[pic_ind]
-                self.passed_now += self.speed
-            self.rect.x += x_change
-            self.rect.y += y_change
-
-            if pygame.sprite.spritecollideany(self, boxes_group) or pygame.sprite.spritecollideany(self, border_group):
-                self.rect.x -= x_change
-                self.rect.y -= y_change
-                self.route = choice(['right', 'left', 'up', 'down'])
-                self.len_way = randint(200, 400)
-
-            if self.passed_now >= self.len_way:
-                self.passed_now = 0
-                self.route = choice(['right', 'left', 'up', 'down'])
-                self.len_way = randint(200, 400)
-                if self.route == 'right':
-                    self.left = False
-                if self.route == 'left':
-                    self.left = True
-                self.stand = True
-
-            if self.stand:
-                pic_ind = self.frames_stand // ((FPS - 40) // len(Bear.left_stand))
-                self.cycle_stand += 1
-                self.frames_stand = (self.frames_stand + 1) % (FPS - 40)
-                self.image = Bear.left_stand[pic_ind] if self.left else Bear.right_stand[pic_ind]
-                if self.cycle_stand >= 360:
-                    self.stand = False
-                    self.cycle_stand = 0
-                    self.frames_stand = 0
-
-    def hp_strip(self):
-        if self.max_hp != self.hp:
-            weight_green_strip = round((40 / self.max_hp) * self.hp)
-            pygame.draw.rect(screen, (pygame.Color('red')), (self.rect.x - 5, self.rect.y - 5, 40, 5))
-            pygame.draw.rect(screen, (pygame.Color('green')), (self.rect.x - 5, self.rect.y - 5, weight_green_strip, 5))
+class Slime(Enemy, pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y, name):
+        Enemy.__init__(self, pos_x, pos_y, name)
+        pygame.sprite.Sprite.__init__(self, enemies_group, all_sprites)
+        self.hp = 5
+        self.damage = 1
+        self.max_hp = self.hp
+        self.exp_give = 3
+        self.money_give = randint(1, 4)
 
 
 class AttackRadius(pygame.sprite.Sprite):
@@ -778,12 +632,12 @@ def generate_map(level):
                 Tile('empty', x, y)
                 x_enemy = x
                 y_enemy = y
-                Enemy(x_enemy, y_enemy)
+                Slime(x_enemy, y_enemy, 'slime')
             elif level[y][x] == 'B':
                 Tile('empty', x, y)
                 x_enemy = x
                 y_enemy = y
-                Bear(x_enemy, y_enemy)
+                Bear(x_enemy, y_enemy, 'bear')
             elif level[y][x] == '|':
                 Tile('border', x, y)
             elif level[y][x] == 'P':
@@ -814,6 +668,20 @@ class Camera:
         self.dy = -(target.rect.y + target.rect.h // 2 - HEIGHT // 2)
 
 
+class Interface:
+    def draw(self):
+        self.money()
+
+    def money(self):
+        font_path = os.path.join('data', 'joystix monospace.ttf')
+        params = (True, (255, 255, 255))
+        font = pygame.font.Font(font_path, 25)
+        screen.blit(sprites['interface']['money'], (10, 10))
+
+        text_surface = font.render(str(player.money), *params)
+        screen.blit(text_surface, (70, 25))
+
+
 tile_images = {'wall': load_image('crate.png'),
                'border': load_image('grass3.png'),
                'empty': load_image('grass3.png'),
@@ -828,7 +696,7 @@ attack_group = pygame.sprite.Group()
 ground_group = pygame.sprite.Group()
 border_group = pygame.sprite.Group()
 portal_group = pygame.sprite.Group()
-
+interface_group = pygame.sprite.Group()
 groups = [all_sprites, boxes_group, player_group, enemies_group, ground_group, border_group, portal_group, attack_group]
 
 tile_width = tile_height = 75
@@ -871,6 +739,7 @@ while running:
     attack_group.update()
     player.indicators()
     portal_group.draw(screen)
+    Interface().draw()
 
     clock.tick(FPS)
     pygame.display.flip()
