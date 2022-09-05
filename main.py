@@ -1,10 +1,12 @@
 import sys
 import csv
 from random import choice, randint
+from NPC import Dealer
 import os
 from math import hypot
 from images import sprites, load_image
 from settings import *
+from inventory import DropItem, InventoryMotionItems, InventoryItem
 
 
 def terminate():
@@ -246,11 +248,11 @@ class Tile(pygame.sprite.Sprite):
 
 
 class Hero(pygame.sprite.Sprite):
-    all_level = {1: [0, 30, 1],
-                 2: [10, 4, 1],
-                 3: [30, 5, 2],
-                 4: [50, 6, 2],
-                 5: [100, 7, 3]}
+    all_level = {1: [0, 30, 0],
+                 2: [10, 4, 0],
+                 3: [30, 5, 1],
+                 4: [50, 6, 1],
+                 5: [100, 7, 2]}
 
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
@@ -265,6 +267,15 @@ class Hero(pygame.sprite.Sprite):
         self.change_x = 0
         self.change_y = 0
 
+        self.amount_items = {}
+        self.equipment_item = {'backpack': '', 'helmet': 'empty_helmet', 'cloak': '', 'weapon1': 'default_sword',
+                               'armor': 'empty_armor', 'weapon2': '', 'potions': '', 'boots': 'empty_boots', 'food': ''}
+        self.empty_items = {'empty_helmet': InventoryItem('empty_helmet'), 'empty_sword': InventoryItem('empty_sword'),
+                            'empty_armor': InventoryItem('empty_armor'), 'empty_boots': InventoryItem('empty_boots')}
+        self.equipment_draw = [None, self.empty_items['empty_helmet'], None, InventoryItem('default_sword'),
+                               self.empty_items['empty_armor'], None, None, self.empty_items['empty_boots'], None]
+        self.inventory_draw = [None] * 16
+
         self.level = 1
         self.hp = self.all_level[self.level][1]
         self.max_hp = self.hp
@@ -272,7 +283,9 @@ class Hero(pygame.sprite.Sprite):
         self.attack_radius = 0
         self.exp = 0
         self.money = 0
-        self.damage = self.all_level[self.level][2]
+        self.protection = self.equipment_draw[1].protection + self.equipment_draw[4].protection + \
+                          self.equipment_draw[7].protection
+        self.damage = self.all_level[self.level][2] + self.equipment_draw[3].damage
 
         self.frames = 0
         self.frames_attack = 0
@@ -319,24 +332,22 @@ class Hero(pygame.sprite.Sprite):
                 self.attack_radius = 0
 
         else:
-            if pygame.key.get_pressed()[pygame.K_LEFT] or pygame.key.get_pressed()[pygame.K_a]:
+            if pygame.key.get_pressed()[pygame.K_a]:
                 self.image = sprites['hero']['left_go'][pic_ind]
                 self.left = True
                 self.change_x = -self.speed
-            if pygame.key.get_pressed()[pygame.K_RIGHT] or pygame.key.get_pressed()[pygame.K_d]:
+            if pygame.key.get_pressed()[pygame.K_d]:
                 self.image = sprites['hero']['right_go'][pic_ind]
                 self.left = False
                 self.change_x = self.speed
-            if pygame.key.get_pressed()[pygame.K_UP] or pygame.key.get_pressed()[pygame.K_w]:
+            if pygame.key.get_pressed()[pygame.K_w]:
                 self.image = sprites['hero']['left_go'][pic_ind] if self.left else sprites['hero']['right_go'][pic_ind]
                 self.change_y = -self.speed
-            if pygame.key.get_pressed()[pygame.K_DOWN] or pygame.key.get_pressed()[pygame.K_s]:
+            if pygame.key.get_pressed()[pygame.K_s]:
                 self.image = sprites['hero']['left_go'][pic_ind] if self.left else sprites['hero']['right_go'][pic_ind]
                 self.change_y = self.speed
-            if not (pygame.key.get_pressed()[pygame.K_DOWN] or pygame.key.get_pressed()[pygame.K_s]) and \
-                    not (pygame.key.get_pressed()[pygame.K_UP] or pygame.key.get_pressed()[pygame.K_w]) and \
-                    not (pygame.key.get_pressed()[pygame.K_RIGHT] or pygame.key.get_pressed()[pygame.K_d]) and \
-                    not (pygame.key.get_pressed()[pygame.K_LEFT] or pygame.key.get_pressed()[pygame.K_a]):
+            if not pygame.key.get_pressed()[pygame.K_s] and not pygame.key.get_pressed()[pygame.K_w] and \
+                    not pygame.key.get_pressed()[pygame.K_d] and not pygame.key.get_pressed()[pygame.K_a]:
                 self.image = sprites['hero']['left_stand'][pic_ind] if self.left else sprites['hero']['right_stand'][
                     pic_ind]
             self.rect.x += self.change_x
@@ -390,7 +401,7 @@ class Hero(pygame.sprite.Sprite):
             self.level += 1
             self.max_hp = Hero.all_level[self.level][1]
             self.hp = self.max_hp
-            self.damage = Hero.all_level[self.level][2]
+            self.damage = self.all_level[self.level][2] + self.equipment_draw[3].damage
 
     def indicators(self):
         # отрисовка текущего количества хп, появляется только если очки здоровья не фулл
@@ -464,6 +475,9 @@ class Enemy(pygame.sprite.Sprite):
             if self.frames_death == (FPS // 3) - 1:
                 player.exp += self.exp_give
                 player.money += self.money_give
+                drop = DropItem()
+                if drop.name != 'nothing':
+                    drop.rect.x, drop.rect.y = self.rect.x, self.rect.y
                 player.level_up()
                 self.kill()
 
@@ -507,7 +521,9 @@ class Enemy(pygame.sprite.Sprite):
                 self.rect.x -= self.x_change
                 self.rect.y -= self.y_change
                 if player.presence_shield():
-                    player.hp -= self.damage
+                    cut_damage = self.damage - player.protection
+                    if cut_damage > 0:
+                        player.hp -= cut_damage
                     if player.hp <= 0:
                         player.death = True
 
@@ -630,23 +646,21 @@ def generate_map(level):
                 Tile('wall', x, y)
             elif level[y][x] == 'E':
                 Tile('empty', x, y)
-                x_enemy = x
-                y_enemy = y
-                Slime(x_enemy, y_enemy, 'slime')
+                Slime(x, y, 'slime')
             elif level[y][x] == 'B':
                 Tile('empty', x, y)
-                x_enemy = x
-                y_enemy = y
-                Bear(x_enemy, y_enemy, 'bear')
+                Bear(x, y, 'bear')
             elif level[y][x] == '|':
                 Tile('border', x, y)
             elif level[y][x] == 'P':
                 Tile('portal', x, y)
             elif level[y][x] == '@':
                 Tile('empty', x, y)
-                x_player = x
-                y_player = y
-    new_player = Hero(x_player, y_player)
+                new_player = Hero(x, y)
+            elif level[y][x] == 'D':
+                Tile('empty', x, y)
+                global dealer
+                dealer = Dealer(x, y)
 
     return new_player, x, y  # объект спрайт игрока, а также размер поля в клетках
 
@@ -676,30 +690,46 @@ class Interface:
         font_path = os.path.join('data', 'joystix monospace.ttf')
         params = (True, (255, 255, 255))
         font = pygame.font.Font(font_path, 25)
-        screen.blit(sprites['interface']['money'], (10, 10))
-
         text_surface = font.render(str(player.money), *params)
         screen.blit(text_surface, (70, 25))
+        screen.blit(sprites['interface']['money'], (10, 10))
+
+    def inventory(self):
+        inventory_surface = pygame.Surface((WIDTH - 200, HEIGHT - 200), pygame.SRCALPHA)
+        inventory_surface.fill((0, 0, 0, 200))
+        screen.blit(inventory_surface, (100, 100))
+
+        x, y = WIDTH // 2 - 170, 125
+        step = 120
+        for item in player.equipment_draw:
+            pygame.draw.rect(screen, (176, 173, 173), (x, y, 100, 100))
+            if item:
+                screen.blit(pygame.transform.scale(item.image, (90, 90)), (x + 5, y + 5))
+            x += step
+            if x == 690:
+                y += step
+                x = WIDTH // 2 - 170
+        step = 95
+        x = 125
+        font_path = os.path.join('data', 'joystix monospace.ttf')
+        params = (True, (255, 255, 255))
+        font = pygame.font.Font(font_path, 15)
+        for item in player.inventory_draw:
+            pygame.draw.rect(screen, (176, 173, 173), (x, y, 80, 80))
+            if item:
+                screen.blit(item.image, (x + 3, y + 3))
+                text_surface = font.render(str(item.amount), *params)
+                screen.blit(text_surface, (x + 2, y + 62))
+            x += step
+            if x == 885:
+                y += step
+                x = 125
 
 
 tile_images = {'wall': load_image('crate.png'),
                'border': load_image('grass3.png'),
                'empty': load_image('grass3.png'),
                'portal': load_image('portal.png')}
-
-# группы спрайтов
-all_sprites = pygame.sprite.Group()
-boxes_group = pygame.sprite.Group()
-player_group = pygame.sprite.Group()
-enemies_group = pygame.sprite.Group()
-attack_group = pygame.sprite.Group()
-ground_group = pygame.sprite.Group()
-border_group = pygame.sprite.Group()
-portal_group = pygame.sprite.Group()
-interface_group = pygame.sprite.Group()
-groups = [all_sprites, boxes_group, player_group, enemies_group, ground_group, border_group, portal_group, attack_group]
-
-tile_width = tile_height = 75
 
 camera = Camera()
 
@@ -715,11 +745,29 @@ else:
     player, level_x, level_y = win_screen()
 
 running = True
+inventory = False
+key_is_pressed = False
 while running:
     screen.fill((0, 0, 0))
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_TAB:
+                inventory = False if inventory else True
+
+    mouse = pygame.mouse.get_pos()
+    click = pygame.mouse.get_pressed()
+
+    if not key_is_pressed and click[0] and inventory:
+        key_is_pressed = True
+        motion = InventoryMotionItems()
+        motion.search_cell(mouse[0], mouse[1], 'start')
+    if key_is_pressed and not click[0] and inventory:
+        key_is_pressed = False
+        motion.search_cell(mouse[0], mouse[1], 'end')
+        motion.swap_cells(player)
+
     # изменяем ракурс камеры
     camera.update(player)
     # обновляем положение всех спрайтов
@@ -727,19 +775,25 @@ while running:
         camera.apply(sprite)
 
     enemies_group.update()  # изменяем координаты всех врагов на карте
-    player.update()  # изменить координаты персонажа (если нажата клавиша движения)
-
+    player.update()  # изменить координаты персонажа
+    dealer.update(player)
     ground_group.draw(screen)
     boxes_group.draw(screen)
     border_group.draw(screen)
     enemies_group.draw(screen)
-    for i in enemies_group:
-        i.hp_strip()
-    player_group.draw(screen)
+    for enemy in enemies_group:
+        enemy.hp_strip()
     attack_group.update()
-    player.indicators()
     portal_group.draw(screen)
+    items_group.draw(screen)
+    NPC_group.draw(screen)
+    for item in items_group:
+        item.pick_up(player)
+    player.indicators()
+    player_group.draw(screen)
     Interface().draw()
+    if inventory:
+        Interface().inventory()
 
     clock.tick(FPS)
     pygame.display.flip()
