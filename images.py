@@ -65,14 +65,23 @@ sprites = {
                                                 (32, 50)) for i in range(1, 4)]},
     'interface':
         {
-            'money': pygame.transform.scale(load_image('interface/money.png', color_key=-1), (60, 60))
+            'money': pygame.transform.scale(load_image('interface/money.png', color_key=-1), (60, 60)),
+            'empty_helmet': pygame.transform.scale(load_image('items/empty_helmet.png', color_key=-1), (70, 70)),
+            'empty_armor': pygame.transform.scale(load_image('items/empty_armor.png', color_key=-1), (70, 70)),
+            'empty_boots': pygame.transform.scale(load_image('items/empty_boots.png', color_key=-1), (70, 70)),
+            'iron_sword': pygame.transform.scale(load_image('items/iron_sword.png', color_key=-1), (70, 70)),
+            'empty_sword': pygame.transform.scale(load_image('items/empty_sword.png', color_key=-1), (70, 70)),
+            'default_sword': pygame.transform.scale(load_image('items/default_sword.png', color_key=-1), (70, 70))
          },
     'items':
         {
-            'iron_sword': pygame.transform.scale(load_image('items/iron_sword.png', color_key=-1), (60, 60)),
-            'empty_helmet': pygame.transform.scale(load_image('items/empty_helmet.png', color_key=-1), (60, 60)),
-            'empty_armor': pygame.transform.scale(load_image('items/empty_armor.png', color_key=-1), (60, 60)),
-            'empty_boots': pygame.transform.scale(load_image('items/empty_boots.png', color_key=-1), (60, 60)),
+            'iron_sword': pygame.transform.scale(load_image('items/iron_sword.png', color_key=-1), (40, 40)),
+            'default_sword': pygame.transform.scale(load_image('items/default_sword.png', color_key=-1), (40, 40)),
+        },
+    'NPC':
+        {
+            'dealer': [pygame.transform.scale(load_image(f'NPC\dealer_stand{i}.png', color_key=-1),
+                                              (50, 75)) for i in range(1, 4)]
         }
 }
 
